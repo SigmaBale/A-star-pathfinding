@@ -72,8 +72,8 @@ impl Node {
             self.f_cost = self.g_cost + self.h_cost;
         } else {
             self.g_cost = pivot_node.borrow().g_cost + 10;
-            self.h_cost = ((((end_node.position.1 - x as usize) * 10) * 2
-                + ((end_node.position.0 - y as usize) * 10) * 2) as f64)
+            self.h_cost = ((((end_node.position.1 - x as usize) * 10).pow(2)
+                + ((end_node.position.0 - y as usize) * 10).pow(2)) as f64)
                 .sqrt() as usize;
             self.f_cost = self.g_cost + self.h_cost;
         }
@@ -128,8 +128,8 @@ pub fn path_finder(maze: &str) -> Result<Vec<(usize, usize)>, &'static str> {
     // Note: All above should be stored inside Maze struct
 
     // Note: This all can be removed, we will calculate costs for our start node inside constructor
-    start_node.h_cost = ((((end_node.position.1 - start_node.position.1) * 10) * 2
-        + ((end_node.position.0 - start_node.position.0) * 10) * 2) as f64)
+    start_node.h_cost = ((((end_node.position.1 - start_node.position.1) * 10).pow(2)
+        + ((end_node.position.0 - start_node.position.0) * 10).pow(2)) as f64)
         .sqrt() as usize;
 
     // Note: This could be removed with HashMap that will hash nodes based on their position.

@@ -1,24 +1,25 @@
 #![allow(dead_code)]
 use std::fs;
 use std::cell::Cell;
-use std::hash::{Hash, Hasher};
 use std::collections::BTreeSet;
-
+use std::collections::VecDeque;
+use std::ptr::{self, read};
 
 pub mod maze {
-    use super::{Hash, Hasher, BTreeSet, Cell, fs};
+    use super::{BTreeSet, Cell, fs, VecDeque, read, ptr};
 
     #[derive(Clone, Copy)]
     struct Position((usize, usize));
 
-    pub struct Path {
-        path: Vec<(usize, usize)>
+    struct Path {
+        fields: VecDeque<(usize, usize)>
     }
 
     struct Node {
-        position: Position,
-        g_cost: usize,
-        h_cost: usize,
+        position: Position, 
+        // note: remove g_cost, h_cost to save on memory (cuz padding)
+        g_cost: usize, // convert into a method
+        h_cost: usize, // convert into a method
         previous: Cell<Option<*const Node>>
     }
 
@@ -31,10 +32,12 @@ pub mod maze {
         maze: Vec<Vec<char>>,
         start: Option<Position>,
         end: Option<Position>,
+        path: Cell<Option<Path>>,
         start_char: char,
         end_char: char,
         wall_char: char,
-        path_char: char
+        path_char: char,
+        separator: char
     }
 
     impl Maze {
@@ -74,10 +77,12 @@ pub mod maze {
                 maze: vec![vec![]],
                 start: None,
                 end: None,
+                path: Cell::new(None),
                 start_char: 'S',
                 end_char: 'E',
                 wall_char: 'W',
-                path_char: 'X'
+                path_char: 'X',
+                separator: '\\'
             }
         }
 
@@ -85,9 +90,9 @@ pub mod maze {
         /// `Err` returns file path that was passed in.
         /// 
         /// Text file should be properly formatted to produce the right format for the maze.
-        /// Fields can be represented with any valid utf-8 char. 
+        /// Fields can be represented with any value in the Unicode codespace; that is, the range of integers from 0 to 10FFFF16.
         /// 
-        /// To insert new row put '\\' (escape char) at the end of the row.
+        /// To insert new row put '\\' (by default) at the end of the row, or you can set your own separator using `set_separator`.
         /// 
         /// **Make sure that each row is the same length! [Example](https://textdoc.co/EHDkyVKueSNRv7Ao)** (keep note that walls/blockades in the example are denoted with `'W'`).
         ///
@@ -109,7 +114,7 @@ pub mod maze {
         pub fn set<'b>(mut self, path: &'b str) -> Result<Self, &'b str> {
             if let Ok(maze) = fs::read_to_string(path) {
                 let maze = maze
-                    .split('\\')
+                    .split(self.separator)
                     .map(|slice| slice.chars().collect())
                     .collect::<Vec<Vec<char>>>();
 
@@ -154,6 +159,15 @@ pub mod maze {
             self
         }
 
+        pub fn set_separator(mut self, symbol: char) -> Self {
+            self.separator = symbol;
+            self
+        }
+
+        pub fn path_char(&self) -> char {
+            self.path_char
+        }
+
         /// Returns reference to formatted maze.
         pub fn field(&self) -> &[Vec<char>] {
             &self.maze
@@ -178,52 +192,143 @@ pub mod maze {
 
         /// Tries to solve the maze. 
         /// 
-        /// If some of the symbol parameters are not found inside the text file, this will return detailed error.
-        pub fn try_solve(&self) -> Result<Path, &'static str> {
+        /// If some of the parameters for `start`/`end` are not found inside the text file, it will return error.
+        /// 
+        /// If it is impossible to solve the maze, it will return error.
+        /// 
+        /// If `start`, `end` or `wall` share the same character, it will return error.
+        /// 
+        /// Otherwise it returns `Path`.
+        pub fn try_solve(&self) -> Result<(), &'static str> {
             if let (Some(start), Some(end)) = (self.start, self.end) {
-
-                if self.start_char == self.end_char
-                    || self.start_char == self.wall_char
-                    || self.end_char == self.wall_char
-                {
+                if self.are_chars_invalid() {
                     return Err("Start, End and Wall characters have to be different values, they can't be the same character!")
                 }
 
-                let path = Path { path: Vec::new() };
+                let mut path = Path { fields: VecDeque::new() };
                 let start_node = Node {
                     position: start,
                     g_cost: 0,
                     h_cost: Node::heuristic(start, end),
                     previous: Cell::new(None)
                 };
-                // Used std library BinaryHeap (max) cuz lazy.
-                // Will work for poping smallest f_cost (custom implementation of Ord on Node)
+
                 let mut open: BTreeSet<Node> = BTreeSet::from([start_node]);
-                let mut closed: BTreeSet<Node> = BTreeSet::new(); // binary heap mayybe?
+                let mut closed: BTreeSet<Node> = BTreeSet::new();
                 
+                let mut counter = 1;
+
                 while !open.is_empty() {
-                    // Safe to unwrap, if we are in loop then open is not empty...
-                    // let min_node = open.iter().min_by(|a, b| a.cmp(&b)).unwrap();
-                    // let current = open.take(min_node).unwrap();
+                    counter += 1;
+                    if counter > 60 { break }
+                    let current = open.pop_first().unwrap();
+                    println!("");
+                    println!("Current: {:?}", current.position.xy());
+                    println!("Popped value with f_cost = {}", current.f_cost());
+                    print!("Open:");
+                    for key in open.iter() {
+                        print!(" {} -", key.f_cost());
+                    }
+                    println!("");
 
-                    // for neighbour in current.neighbours(self) {
-                    //     if open.contains(&neighbour) || closed.contains(&neighbour) {
-                    //         continue;
-                    //     }else {
-                    //         open.insert(neighbour);
-                    //     }
-                    // }
+                    if current.position.xy() == self.end.unwrap().xy() {
+                        let mut curr = current;
+                        while let Some(node) = curr.previous.get().take() {
+                            debug_assert_ne!(node, ptr::null());
+                            unsafe {
+                                let prev = read(node);
+                                path.fields.push_back(prev.position.0);
+                                curr = prev;
+                            }
+                        }
+                        self.path.set(Some(path));
+                        return Ok(())
+                    } else {
+                        for neighbour in current.neighbours(self) {
+                            let open_node = open.get(&neighbour);
+                            let closed_node = closed.get(&neighbour);
+
+                            if closed_node.is_some() {
+                                continue;
+                            } else if let Some(node) = open_node {
+                                if node.f_cost() < neighbour.f_cost() {
+                                    continue;
+                                } else {
+                                    open.insert(neighbour);
+                                }
+                            } else {
+                                println!("\
+                                    Inserting node pos {:?}\nf_cost: {}\nh_cost: {}\ng_cost: {}",
+                                    neighbour.position.xy(),
+                                    neighbour.f_cost(), 
+                                    neighbour.h_cost,
+                                    neighbour.g_cost
+                                );
+                                open.insert(neighbour);
+                            }
+                        }
+                    }
+                    closed.insert(current);
                 }
-
-
-                Ok(path)
+                Err("Maze is not solvable, impossible to reach the end! :(")
             }else {
-                Err("Start/End is not set, check that your character matches the one in the text file!")
+                Err("Start/End is not set, check that your characters match the ones in the text file!")
             }
         }
 
+        pub fn print_path(&self) -> Result<(), &'static str> {
+            if let Some(path) = self.path.take() {
+                let mut maze = self.maze.clone();
+
+                for (x, y) in path.fields.iter() {
+                    maze[*y][*x] = self.path_char;
+                }
+
+                let maze = maze
+                    .into_iter()
+                    .map(|row| row.into_iter().collect::<String>())
+                    .collect::<Vec<String>>();
+
+                for row in maze {
+                    println!("{row}");
+                }
+
+                Ok(())
+            }else {
+                Err("Path is not found! First solve the maze using `try_solve`.")
+            }
+        }
+
+        pub fn print_maze(&self) -> Result<(), &'static str> {
+            if !self.maze.is_empty() {
+                let maze = 
+                    self.maze
+                        .clone()
+                        .into_iter()
+                        .map(|row| row.into_iter().collect::<String>())
+                        .collect::<Vec<_>>();
+
+                for row in maze.iter() {
+                    println!("{row}");
+                }
+
+                Ok(())
+            } else {
+                Err("Maze is not set! Set your maze using `set`!")
+            }
+        }
+        
         pub fn wall(&self) -> char {
             self.wall_char
+        }
+
+        pub(crate) fn are_chars_invalid(&self) -> bool {
+            self.end_char == self.start_char
+                || self.start_char == self.separator
+                || self.end_char == self.separator
+                || self.wall_char == self.separator
+                || self.wall_char == self.start_char
+                || self.wall_char == self.end_char
         }
 
         fn end(&self) -> Option<Position> {
@@ -238,7 +343,12 @@ pub mod maze {
             for (i, row) in self.maze.iter().enumerate() {
                 let start = row.iter().enumerate().find(|(_, char)| **char == self.start_char);
                 if let Some((x_cord, _)) = start {
+                    println!("Found start! Row: {}, Column: {}", i + 1, x_cord + 1);
                     self.start = Some(Position((x_cord, i)));
+                    println!("{:?}", self.start.unwrap().xy());
+                    return
+                }else {
+                    println!("Could not find start symbol: {}, in row {}...", self.start_char, i + 1);
                 }
             }
         }
@@ -247,10 +357,16 @@ pub mod maze {
             for (i, row) in self.maze.iter().enumerate() {
                 let start = row.iter().enumerate().find(|(_, char)| **char == self.end_char);
                 if let Some((x_cord, _)) = start {
+                    println!("Found end! Row: {}, Column: {}", i+1, x_cord + 1);
                     self.end = Some(Position((x_cord, i)));
+                    println!("{:?}", self.end.unwrap().xy());
+                    return
+                }else {
+                    println!("Could not find end symbol: {}, in row {}...", self.end_char, i + 1);
                 }
             }
         }
+
     }
 
     impl Node {
@@ -276,8 +392,8 @@ pub mod maze {
             for i in 0..8 {
                 // Hopefully this is not giga maze of hell :))) :/
                 // Max number of nodes: 2^63 − 1 (64-bit targets) meow, bark bark.
-                let nx = self.position.x() as isize + offset_x[i];
-                let ny = self.position.y() as isize + offset_y[i];
+                let nx = self.position.x() + offset_x[i];
+                let ny = self.position.y() + offset_y[i];
 
                 if Node::is_valid((nx, ny), maze) {
                     let (nx, ny) = (nx as usize, ny as usize);
@@ -285,11 +401,12 @@ pub mod maze {
                     // SAFETY (unwrap): If we are executing neighbours method it means we are also executing
                     // try_solve for Maze, we already ensured before in try_solve that we return early if end or start is None.
                     let node = Node::new(Position((nx, ny)), self, maze.end().unwrap());
-                    // We are never deallocating nodes at least not until program ends, that is how astar alg works, eats your memory. (note: implement arena) 
+                    // We are never deallocating nodes at least not until program ends, that is how astar alg works, eats your memory. (note: implement allocator arena) 
                     // So we will never point to a freed memory, that way we can later extract our Path, so we are ok with storing a raw pointer.
                     // Because when we later dereference it to get position of that node, pointer will always be valid (it won't point to a freed memory).
-                    node.previous.set(Some(self as *const _)); // if value gets moved pointer follows?? WARNING!
+                    node.previous.set(Some(self as *const _));
                     neighbours.push(node);
+
                 }else {
                     continue;
                 }
@@ -298,8 +415,8 @@ pub mod maze {
         }
 
         fn heuristic(position: Position, end: Position) -> usize {
-            let a = ((position.x() - end.x()) * 10).pow(2);
-            let b = ((position.y() - end.y()) * 10).pow(2);
+            let a = ((end.x() - position.x()) * 10).pow(2);
+            let b = ((end.y() - position.y()) * 10).pow(2);
             let c = a + b;
             (c as f64).sqrt() as usize
         }
@@ -312,7 +429,7 @@ pub mod maze {
                 (prev.position.x() + 1, prev.position.y() + 1),
             ];
 
-            if diagonal_positions.contains(&position.0) {
+            if diagonal_positions.contains(&position.xy()) {
                 prev.g_cost + 14
             }else {
                 prev.g_cost + 10
@@ -324,22 +441,17 @@ pub mod maze {
         }
 
         fn is_valid(position: (isize, isize), maze: &Maze) -> bool {
-            if position.0 >= maze.x_len() as isize
-                || position.0 < 0
-                || position.1 >= maze.y_len() as isize
-                || position.1 < 0
-                || maze.field()[position.1 as usize][position.0 as usize] == maze.wall()
-            {
-                false
-            }
-            else { true }
+            position.0 < maze.x_len() as isize
+                && position.0 >= 0
+                && position.1 < maze.y_len() as isize
+                && position.1 >= 0
+                && maze.field()[position.1 as usize][position.0 as usize] != maze.wall()
         }
     }
 
     impl PartialEq for Node {
         fn eq(&self, other: &Self) -> bool {
             self.position.xy() == other.position.xy()
-            && self.f_cost() == other.f_cost()
         }
     }
     
@@ -357,24 +469,17 @@ pub mod maze {
         }
     }
 
-    impl Hash for Node {
-        fn hash<H: Hasher>(&self, state: &mut H) {
-            self.position.xy().hash(state);
-            self.f_cost().hash(state);
-        }
-    }
-
     impl Position {
-        fn x(&self) -> usize {
-            self.0.0
+        fn x(&self) -> isize {
+            self.0.0 as isize
         }
 
-        fn y(&self) -> usize {
-            self.0.1
+        fn y(&self) -> isize {
+            self.0.1 as isize
         }
 
-        fn xy(&self) -> (usize, usize) {
-            (self.0.0, self.0.1)
+        fn xy(&self) -> (isize, isize) {
+            (self.0.0 as isize, self.0.1 as isize)
         }
     }
 
