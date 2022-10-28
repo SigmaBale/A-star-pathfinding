@@ -21,4 +21,8 @@ fn main() {
         println!("{e}");
         process::exit(1);
     });
+
+    let path = maze.get_path().unwrap();
+
+    println!("{:?}", path);
 }
