@@ -21,20 +21,20 @@ pub mod maze {
     struct Position((usize, usize));
 
     /// Wrapper around `f_cost` that represents priority inside the `PriorityQueue`.
-    /// 
+    ///
     /// It has custom implementation of `PartialOrd` and `Ord` traits to provide correct functionality when getting
     /// popped out of a priority queue.
     struct Priority(usize);
 
     /// `Path` is wrapper around the shortest path of the maze.
-    /// 
+    ///
     /// Shortest path is represented as a `VecDeque` of a tuple (`usize, usize`) elements that represent coordinates.
     struct Path {
         fields: VecDeque<(usize, usize)>,
     }
 
     /// Node represents each field in 2D maze, it contains `Position` and costs/weights.
-    /// 
+    ///
     /// It also contains heap allocation of its parent/previous `Node` that "discovered" it.
     /// This is due to change, if arena allocator gets implemented.
     #[derive(Clone)]
@@ -151,15 +151,15 @@ pub mod maze {
         }
 
         /// Same as `set_inline`, if you are not using seperator to split into rows, then use set.
-        /// 
+        ///
         /// Set splits when it finds whitespace char, so your text file can look like this:
-        /// 
+        ///
         /// S...................
-        /// 
+        ///
         /// ....................
-        /// 
+        ///
         /// ...................E
-        /// 
+        ///
         /// **Each new line is automatically formatted to represent new row.**
         pub fn set(mut self, path: &str) -> Result<Self, &str> {
             if let Ok(maze) = fs::read_to_string(path) {
@@ -206,7 +206,7 @@ pub mod maze {
         }
 
         /// Builder style method you can chain with other builder methods.
-        /// 
+        ///
         /// Sets the symbol for path.
         pub fn set_path_char(mut self, symbol: char) -> Self {
             self.path_char = symbol;
@@ -214,7 +214,7 @@ pub mod maze {
         }
 
         /// Builder style method you can chain with other builder methods.
-        /// 
+        ///
         /// Sets the symbol that marks start of new row inside the text file.
         pub fn set_separator(mut self, symbol: char) -> Self {
             self.separator = symbol;
@@ -224,6 +224,11 @@ pub mod maze {
         /// Returns current path character.
         pub fn path_char(&self) -> char {
             self.path_char
+        }
+
+        /// Returns `char` that represents the wall inside the text.
+        pub fn wall(&self) -> char {
+            self.wall_char
         }
 
         /// Returns reference to formatted maze.
@@ -316,12 +321,12 @@ pub mod maze {
                 }
                 Err("Maze is not solvable, impossible to reach the end! :(")
             } else {
-                Err("Start/End is not set, check that your characters match the ones in the text file!")
+                Err("Start/End is not set, check that your characters match the ones in the text file! Or your maze is too small (3 < fields).")
             }
         }
 
         /// Returns `Vec` that represents the shortest path from `Start` to the `End`
-        /// 
+        ///
         /// If maze is not solved it will return `Err`. You must first `try_solve` the maze.
         pub fn get_path(&self) -> Result<Vec<(usize, usize)>, &'static str> {
             if let Some(path) = &self.path {
@@ -333,7 +338,7 @@ pub mod maze {
         }
 
         /// Prints the solved maze, path is marked with `path_char`.
-        /// 
+        ///
         /// If maze is not solved, it will return `Err`. You must first `try_solve` the maze.
         pub fn print_path(&self) -> Result<(), &'static str> {
             if self.path.is_some() {
@@ -342,7 +347,7 @@ pub mod maze {
 
                 let y_str_len = self.y_len().to_string().len() as i32;
                 let y_len = (self.y_len() as i32 - y_str_len).abs() as usize;
-                
+
                 let horizontal = format!("<{:-^x_len$}>", self.x_len());
                 let vertical: Vec<char> = format!("^{:|^y_len$}v", self.y_len()).chars().collect();
                 let slice = &vertical[..];
@@ -352,13 +357,13 @@ pub mod maze {
                     for (x, char) in row.iter().copied().enumerate() {
                         if char == self.wall_char {
                             print!("{}{char}{}", WALL_COLOUR, RESET)
-                        }else if char == self.start_char {
+                        } else if char == self.start_char {
                             print!("{}{char}{}", START_COLOUR, RESET)
-                        }else if char == self.end_char {
+                        } else if char == self.end_char {
                             print!("{}{char}{}", END_COLOUR, RESET)
-                        }else if self.path.as_ref().unwrap().fields.contains(&(x, y))  {
+                        } else if self.path.as_ref().unwrap().fields.contains(&(x, y)) {
                             print!("{}{}{}", PATH_COLOUR, self.path_char, RESET)
-                        }else {
+                        } else {
                             print!("{char}")
                         }
                     }
@@ -372,7 +377,7 @@ pub mod maze {
         }
 
         /// Prints the maze that is loaded from the text file.
-        /// 
+        ///
         /// If maze is not loaded then it will return `Err`. You must first `set` the maze.
         pub fn print_maze(&self) -> Result<(), &'static str> {
             if !self.maze.is_empty() {
@@ -381,7 +386,7 @@ pub mod maze {
 
                 let y_str_len = self.y_len().to_string().len() as i32;
                 let y_len = (self.y_len() as i32 - y_str_len).abs() as usize;
-                
+
                 let horizontal = format!("<{:-^x_len$}>", self.x_len());
                 let vertical: Vec<char> = format!("^{:|^y_len$}v", self.y_len()).chars().collect();
                 let slice = &vertical[..];
@@ -391,11 +396,11 @@ pub mod maze {
                     for char in row.iter().copied() {
                         if char == self.wall_char {
                             print!("{}{char}{}", WALL_COLOUR, RESET)
-                        }else if char == self.start_char {
+                        } else if char == self.start_char {
                             print!("{}{char}{}", START_COLOUR, RESET)
-                        }else if char == self.end_char {
+                        } else if char == self.end_char {
                             print!("{}{char}{}", END_COLOUR, RESET)
-                        }else {
+                        } else {
                             print!("{char}")
                         }
                     }
@@ -404,15 +409,10 @@ pub mod maze {
                 println!("\n\n");
                 Ok(())
             } else {
-                Err("Maze is not set! Set your maze using `set`!")
+                Err("Maze is not set or is too small! Set your maze using `set` or increase the size of the maze!")
             }
         }
 
-        /// Returns `char` that represents the wall inside the text.
-        pub fn wall(&self) -> char {
-            self.wall_char
-        }
-        
         /// Helper function for checking if all characters are unique.
         fn are_chars_invalid(&self) -> bool {
             self.end_char == self.start_char
