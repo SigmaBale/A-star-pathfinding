@@ -9,5 +9,5 @@
 /// 
 /// For now it only contains **A*** (A-star) pathfinder and it is guaranteed to find the shortest possible path.
 /// 
-/// It also uses `extern` crate `priority_queue`.
+/// *Note:* *It also uses `extern` crate `priority_queue`.*
 pub mod pathfinder;

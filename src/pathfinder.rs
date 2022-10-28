@@ -10,21 +10,31 @@ pub mod maze {
 
     use super::*;
 
-    #[derive(Clone, Copy, Debug)]
+    #[derive(Clone, Copy)]
     struct Position((usize, usize));
 
+    /// Wrapper around `f_cost` that represents priority inside the `PriorityQueue`.
+    /// 
+    /// It has custom implementation of `PartialOrd` and `Ord` traits to provide correct functionality when getting
+    /// popped out of a priority queue.
     struct Priority(usize);
 
+    /// `Path` is wrapper around the shortest path of the maze.
+    /// 
+    /// Shortest path is represented as a `VecDeque` of a tuple (`usize, usize`) elements that represent coordinates.
     struct Path {
         fields: VecDeque<(usize, usize)>,
     }
 
+    /// Node represents each field in 2D maze, it contains `Position` and costs/weights.
+    /// 
+    /// It also contains heap allocation of its parent/previous `Node` that "discovered" it.
+    /// This is due to change, if arena allocator gets implemented.
     #[derive(Clone)]
     struct Node {
         position: Position,
-        // note: remove g_cost, h_cost to save on memory (cuz padding)
-        g_cost: usize, // convert into a method
-        h_cost: usize, // convert into a method
+        g_cost: usize,
+        h_cost: usize,
         previous: Option<Box<Node>>,
     }
 
@@ -371,7 +381,8 @@ pub mod maze {
         pub fn wall(&self) -> char {
             self.wall_char
         }
-
+        
+        /// Helper function for checking if all characters are unique.
         fn are_chars_invalid(&self) -> bool {
             self.end_char == self.start_char
                 || self.start_char == self.separator
@@ -381,14 +392,7 @@ pub mod maze {
                 || self.wall_char == self.end_char
         }
 
-        fn end(&self) -> Option<Position> {
-            self.end
-        }
-
-        fn start(&self) -> Option<Position> {
-            self.start
-        }
-
+        /// Helper function for finding start character and setting start position.
         fn calculate_start(&mut self) {
             for (i, row) in self.maze.iter().enumerate() {
                 let start = row
@@ -402,6 +406,7 @@ pub mod maze {
             }
         }
 
+        /// Helper function for finding end character and setting end position.
         fn calculate_end(&mut self) {
             for (i, row) in self.maze.iter().enumerate() {
                 let start = row
