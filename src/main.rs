@@ -1,6 +1,7 @@
-use astar::path::maze::Maze;
+use astar::pathfinder::maze::Maze;
 use std::process;
 
+// Example:
 fn main() {
     let mut maze = Maze::new().set("maze.txt").unwrap_or_else(|e| {
         println!("{e}");
@@ -24,5 +25,5 @@ fn main() {
 
     let path = maze.get_path().unwrap();
 
-    println!("{:?}", path);
+    println!("\nPath: {:?}", path);
 }

@@ -1,10 +1,11 @@
 #![allow(dead_code)]
 use priority_queue::PriorityQueue;
 use std::collections::VecDeque;
+use std::default::Default;
 use std::fs;
 use std::hash::{Hash, Hasher};
-use std::default::Default;
 
+/// Core module that contains public `Maze` struct to setup and load the maze.
 pub mod maze {
 
     use super::*;
@@ -27,11 +28,11 @@ pub mod maze {
         previous: Option<Box<Node>>,
     }
 
-    /// Maze type that is constructed from the maze `.txt` file.
+    /// Maze type that is constructed from the `.txt` file using `set` or `set_inline`.
     ///
-    /// It has basic API for customization of start, end and wall symbols.
+    /// It has basic API for customization of start, end, separator and wall symbols and some other accessories.
     ///
-    /// Once constructed it can give out basic information of our maze dimensions.
+    /// Once constructed it can give out basic information of our maze parameters.
     pub struct Maze {
         maze: Vec<Vec<char>>,
         start: Option<Position>,
@@ -45,8 +46,7 @@ pub mod maze {
     }
 
     impl Maze {
-        /// Constructs a new `Maze`, by default maze is empty and needs
-        /// to be set, using `set` method.
+        /// Constructs a new `Maze`, by default maze is empty and needs to be set, using `set` method.
         /// `Start` and `End` are `None` by default.
         ///
         /// First set your maze using `set`, then if your maze contains walls/blockades use `walls_char`
@@ -62,7 +62,7 @@ pub mod maze {
         /// **If your file contains multiple end symbols, then the first appearing end from text file will be chosen!**
         ///
         /// # Examples
-        /// ```no_run
+        /// ```no_run, compile_fail
         /// fn main() -> Result<(), &'static str> {
         ///     let mut maze = Maze::new();
         ///
@@ -106,7 +106,7 @@ pub mod maze {
         ///
         /// # Examples
         ///
-        /// ```no_run
+        /// ```no_run, compile_fail
         /// fn main() -> Result<(), &str> {
         ///     // Lets say new_maze.txt contained this text:
         ///     // ".../.../..."
@@ -115,10 +115,40 @@ pub mod maze {
         ///     assert_eq!(&[vec!['.', '.', '.']; 3], maze.field())
         /// }
         /// ```
+        pub fn set_inline(mut self, path: &str) -> Result<Self, &str> {
+            if let Ok(maze) = fs::read_to_string(path) {
+                let maze = maze
+                    .trim()
+                    .split(self.separator)
+                    .map(|slice| slice.chars().collect())
+                    .collect::<Vec<Vec<char>>>();
+
+                self.maze = maze;
+                self.calculate_start();
+                self.calculate_end();
+
+                Ok(self)
+            } else {
+                Err(path)
+            }
+        }
+
+        /// Same as `set_inline`, if you are not using seperator to split into rows, then use set.
+        /// 
+        /// Set splits when it finds whitespace char, so your text file can look like this:
+        /// 
+        /// S...................
+        /// 
+        /// ....................
+        /// 
+        /// ...................E
+        /// 
+        /// **Each new line is automatically formatted to represent new row.**
         pub fn set(mut self, path: &str) -> Result<Self, &str> {
             if let Ok(maze) = fs::read_to_string(path) {
                 let maze = maze
-                    .split(self.separator)
+                    .trim()
+                    .split_whitespace()
                     .map(|slice| slice.chars().collect())
                     .collect::<Vec<Vec<char>>>();
 
@@ -158,16 +188,23 @@ pub mod maze {
             self
         }
 
+        /// Builder style method you can chain with other builder methods.
+        /// 
+        /// Sets the symbol for path.
         pub fn set_path_char(mut self, symbol: char) -> Self {
             self.path_char = symbol;
             self
         }
 
+        /// Builder style method you can chain with other builder methods.
+        /// 
+        /// Sets the symbol that marks start of new row inside the text file.
         pub fn set_separator(mut self, symbol: char) -> Self {
             self.separator = symbol;
             self
         }
 
+        /// Returns current path character.
         pub fn path_char(&self) -> char {
             self.path_char
         }
@@ -178,13 +215,11 @@ pub mod maze {
         }
 
         /// Returns maze length by number of collumns.
-        /// It is called `x_len` because of Cartesian plane.
         pub fn x_len(&self) -> usize {
             self.maze[0].len()
         }
 
         /// Returns maze length by number of rows.
-        /// It is called `y_len` because of Cartesian plane.
         pub fn y_len(&self) -> usize {
             self.maze.len()
         }
@@ -268,6 +303,9 @@ pub mod maze {
             }
         }
 
+        /// Returns `Vec` that represents the shortest path from `Start` to the `End`
+        /// 
+        /// If maze is not solved it will return `Err`. You must first `try_solve` the maze.
         pub fn get_path(&self) -> Result<Vec<(usize, usize)>, &'static str> {
             if let Some(path) = &self.path {
                 let vec = path.fields.iter().copied().collect::<Vec<_>>();
@@ -277,6 +315,9 @@ pub mod maze {
             }
         }
 
+        /// Prints the solved maze, path is marked with `path_char`.
+        /// 
+        /// If maze is not solved, it will return `Err`. You must first `try_solve` the maze.
         pub fn print_path(&self) -> Result<(), &'static str> {
             if let Some(path) = &self.path {
                 let mut maze = self.maze.clone();
@@ -304,6 +345,9 @@ pub mod maze {
             }
         }
 
+        /// Prints the maze that is loaded from the text file.
+        /// 
+        /// If maze is not loaded then it will return `Err`. You must first `set` the maze.
         pub fn print_maze(&self) -> Result<(), &'static str> {
             if !self.maze.is_empty() {
                 println!("\n\n");
@@ -323,6 +367,7 @@ pub mod maze {
             }
         }
 
+        /// Returns `char` that represents the wall inside the text.
         pub fn wall(&self) -> char {
             self.wall_char
         }

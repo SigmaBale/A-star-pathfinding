@@ -1,4 +1,13 @@
-#![feature(is_some_and)]
-#![feature(map_first_last)]
-pub mod path;
-pub mod pathfinding;
+/// This crate provides basic API for solving 2D mazes inside a text file.
+/// 
+/// User can use custom characters for marking start and end positions, row separator
+/// if needed and also path character for when maze is solved to be printed.
+/// 
+/// Maze is directly loaded from text file and is solved using Euclidian Distance heuristic.
+/// 
+/// It uses 8 directions of movement (straight and diagonal).
+/// 
+/// For now it only contains **A*** (A-star) pathfinder and it is guaranteed to find the shortest possible path.
+/// 
+/// It also uses `extern` crate `priority_queue`.
+pub mod pathfinder;
