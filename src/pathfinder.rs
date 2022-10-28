@@ -5,6 +5,13 @@ use std::default::Default;
 use std::fs;
 use std::hash::{Hash, Hasher};
 
+// Set whichever colour you like more.
+const PATH_COLOUR: &str = "\x1B[92m";
+const WALL_COLOUR: &str = "\x1B[91m";
+const START_COLOUR: &str = "\x1B[93m";
+const END_COLOUR: &str = "\x1B[36m";
+const RESET: &str = "\x1B[0m";
+
 /// Core module that contains public `Maze` struct to setup and load the maze.
 pub mod maze {
 
@@ -329,24 +336,33 @@ pub mod maze {
         /// 
         /// If maze is not solved, it will return `Err`. You must first `try_solve` the maze.
         pub fn print_path(&self) -> Result<(), &'static str> {
-            if let Some(path) = &self.path {
-                let mut maze = self.maze.clone();
+            if self.path.is_some() {
+                let x_str_len = self.x_len().to_string().len() as i32;
+                let x_len = (self.x_len() as i32 - x_str_len).abs() as usize;
 
-                for (x, y) in path.fields.iter().skip(1) {
-                    debug_assert!(maze[*y][*x] != self.wall_char);
-                    if (*x, *y) == self.end.unwrap().xy_usize() {
-                        break;
+                let y_str_len = self.y_len().to_string().len() as i32;
+                let y_len = (self.y_len() as i32 - y_str_len).abs() as usize;
+                
+                let horizontal = format!("<{:-^x_len$}>", self.x_len());
+                let vertical: Vec<char> = format!("^{:|^y_len$}v", self.y_len()).chars().collect();
+                let slice = &vertical[..];
+
+                println!("{}", horizontal);
+                for (y, row) in self.maze.iter().enumerate() {
+                    for (x, char) in row.iter().copied().enumerate() {
+                        if char == self.wall_char {
+                            print!("{}{char}{}", WALL_COLOUR, RESET)
+                        }else if char == self.start_char {
+                            print!("{}{char}{}", START_COLOUR, RESET)
+                        }else if char == self.end_char {
+                            print!("{}{char}{}", END_COLOUR, RESET)
+                        }else if self.path.as_ref().unwrap().fields.contains(&(x, y))  {
+                            print!("{}{}{}", PATH_COLOUR, self.path_char, RESET)
+                        }else {
+                            print!("{char}")
+                        }
                     }
-                    maze[*y][*x] = self.path_char;
-                }
-
-                let maze = maze
-                    .into_iter()
-                    .map(|row| row.into_iter().collect::<String>())
-                    .collect::<Vec<String>>();
-
-                for row in maze {
-                    println!("{row}");
+                    print!(" {}\n", slice[y]);
                 }
 
                 Ok(())
@@ -360,15 +376,30 @@ pub mod maze {
         /// If maze is not loaded then it will return `Err`. You must first `set` the maze.
         pub fn print_maze(&self) -> Result<(), &'static str> {
             if !self.maze.is_empty() {
-                println!("\n\n");
-                let maze = self
-                    .maze
-                    .iter()
-                    .map(|row| row.iter().collect::<String>())
-                    .collect::<Vec<_>>();
+                let x_str_len = self.x_len().to_string().len() as i32;
+                let x_len = (self.x_len() as i32 - x_str_len).abs() as usize;
 
-                for row in maze.iter() {
-                    println!("{row}");
+                let y_str_len = self.y_len().to_string().len() as i32;
+                let y_len = (self.y_len() as i32 - y_str_len).abs() as usize;
+                
+                let horizontal = format!("<{:-^x_len$}>", self.x_len());
+                let vertical: Vec<char> = format!("^{:|^y_len$}v", self.y_len()).chars().collect();
+                let slice = &vertical[..];
+
+                println!("{}", horizontal);
+                for (y, row) in self.maze.iter().enumerate() {
+                    for char in row.iter().copied() {
+                        if char == self.wall_char {
+                            print!("{}{char}{}", WALL_COLOUR, RESET)
+                        }else if char == self.start_char {
+                            print!("{}{char}{}", START_COLOUR, RESET)
+                        }else if char == self.end_char {
+                            print!("{}{char}{}", END_COLOUR, RESET)
+                        }else {
+                            print!("{char}")
+                        }
+                    }
+                    print!(" {}\n", slice[y]);
                 }
                 println!("\n\n");
                 Ok(())
