@@ -3,8 +3,7 @@ use priority_queue::PriorityQueue;
 use std::collections::VecDeque;
 use std::fs;
 use std::hash::{Hash, Hasher};
-use std::cmp::Reverse;
-
+use std::default::Default;
 
 pub mod maze {
 
@@ -116,7 +115,7 @@ pub mod maze {
         ///     assert_eq!(&[vec!['.', '.', '.']; 3], maze.field())
         /// }
         /// ```
-        pub fn set<'b>(mut self, path: &'b str) -> Result<Self, &'b str> {
+        pub fn set(mut self, path: &str) -> Result<Self, &str> {
             if let Ok(maze) = fs::read_to_string(path) {
                 let maze = maze
                     .split(self.separator)
@@ -218,17 +217,16 @@ pub mod maze {
                 };
                 let priority = Priority(start_node.f_cost());
 
-                let mut open: PriorityQueue<Node, Priority> = PriorityQueue::from(vec![(start_node.clone(), priority)]);
+                let mut open: PriorityQueue<Node, Priority> =
+                    PriorityQueue::from(vec![(start_node, priority)]);
                 let mut closed: PriorityQueue<Node, Priority> = PriorityQueue::new();
 
                 while !open.is_empty() {
                     let current = open.pop().unwrap();
-                    println!();
-                    println!("current pos: {:?}, f_cost: {}", current.0.position.xy(), current.1.0);
 
                     if current.0.position.xy() == end.xy() {
-                        let mut path = Path { 
-                            fields: VecDeque::from(vec![current.0.position.xy_usize()]) 
+                        let mut path = Path {
+                            fields: VecDeque::from(vec![current.0.position.xy_usize()]),
                         };
                         let mut curr = current.0.previous;
 
@@ -238,29 +236,30 @@ pub mod maze {
                         }
 
                         self.path = Some(path);
-                        return Ok(())
+                        return Ok(());
                     }
-                        for mut neighbour in current.0.neighbours(&self) {
-                            let f_cost = neighbour.f_cost();
-                            if let Some(node) = closed.get(&neighbour) {
-                                if node.1.0 < neighbour.f_cost() {
-                                    continue;
-                                } else {
-                                    neighbour.previous = Some(Box::new(current.0.clone()));
-                                    open.push(neighbour, Priority(f_cost));
-                                }
-                            }else if let Some(node) = open.get(&neighbour) {
-                                if node.1.0 < neighbour.f_cost() {
-                                    continue;
-                                }else {
-                                    neighbour.previous = Some(Box::new(current.0.clone()));
-                                    open.push(neighbour, Priority(f_cost));
-                                }
-                            }else {
+                    for mut neighbour in current.0.neighbours(self) {
+                        let f_cost = neighbour.f_cost();
+
+                        if let Some(node) = closed.get(&neighbour) {
+                            if node.0.lower_cost(&neighbour) {
+                                continue;
+                            } else {
                                 neighbour.previous = Some(Box::new(current.0.clone()));
                                 open.push(neighbour, Priority(f_cost));
                             }
+                        } else if let Some(node) = open.get(&neighbour) {
+                            if node.0.lower_cost(&neighbour) {
+                                continue;
+                            } else {
+                                neighbour.previous = Some(Box::new(current.0.clone()));
+                                open.push(neighbour, Priority(f_cost));
+                            }
+                        } else {
+                            neighbour.previous = Some(Box::new(current.0.clone()));
+                            open.push(neighbour, Priority(f_cost));
                         }
+                    }
                     closed.push(current.0, current.1);
                 }
                 Err("Maze is not solvable, impossible to reach the end! :(")
@@ -269,10 +268,11 @@ pub mod maze {
             }
         }
 
-        pub fn get_path(&self) -> Result<&VecDeque<(usize, usize)>, &'static str> {
+        pub fn get_path(&self) -> Result<Vec<(usize, usize)>, &'static str> {
             if let Some(path) = &self.path {
-                Ok(&path.fields)
-            }else {
+                let vec = path.fields.iter().copied().collect::<Vec<_>>();
+                Ok(vec)
+            } else {
                 Err("Path is not found! First solve the maze using `try_solve`.")
             }
         }
@@ -283,7 +283,9 @@ pub mod maze {
 
                 for (x, y) in path.fields.iter().skip(1) {
                     debug_assert!(maze[*y][*x] != self.wall_char);
-                    if (*x, *y) == self.end.unwrap().xy_usize() { break }
+                    if (*x, *y) == self.end.unwrap().xy_usize() {
+                        break;
+                    }
                     maze[*y][*x] = self.path_char;
                 }
 
@@ -304,6 +306,7 @@ pub mod maze {
 
         pub fn print_maze(&self) -> Result<(), &'static str> {
             if !self.maze.is_empty() {
+                println!("\n\n");
                 let maze = self
                     .maze
                     .iter()
@@ -313,7 +316,7 @@ pub mod maze {
                 for row in maze.iter() {
                     println!("{row}");
                 }
-
+                println!("\n\n");
                 Ok(())
             } else {
                 Err("Maze is not set! Set your maze using `set`!")
@@ -334,11 +337,11 @@ pub mod maze {
         }
 
         fn end(&self) -> Option<Position> {
-            self.end.map(|position| position)
+            self.end
         }
 
         fn start(&self) -> Option<Position> {
-            self.start.map(|position| position)
+            self.start
         }
 
         fn calculate_start(&mut self) {
@@ -348,16 +351,8 @@ pub mod maze {
                     .enumerate()
                     .find(|(_, char)| **char == self.start_char);
                 if let Some((x_cord, _)) = start {
-                    println!("Found start! Row: {}, Column: {}", i + 1, x_cord + 1);
                     self.start = Some(Position((x_cord, i)));
-                    println!("{:?}", self.start.unwrap().xy());
                     return;
-                } else {
-                    println!(
-                        "Could not find start symbol: {}, in row {}...",
-                        self.start_char,
-                        i + 1
-                    );
                 }
             }
         }
@@ -369,18 +364,16 @@ pub mod maze {
                     .enumerate()
                     .find(|(_, char)| **char == self.end_char);
                 if let Some((x_cord, _)) = start {
-                    println!("Found end! Row: {}, Column: {}", i + 1, x_cord + 1);
                     self.end = Some(Position((x_cord, i)));
-                    println!("{:?}", self.end.unwrap().xy());
                     return;
-                } else {
-                    println!(
-                        "Could not find end symbol: {}, in row {}...",
-                        self.end_char,
-                        i + 1
-                    );
                 }
             }
+        }
+    }
+
+    impl Default for Maze {
+        fn default() -> Self {
+            Self::new()
         }
     }
 
@@ -414,7 +407,6 @@ pub mod maze {
 
                 if Node::is_valid((node_x, node_y), maze) {
                     let node = Node::new(position, self, maze.end.unwrap());
-                    println!("Found node pos: {:?}, g_cost: {}, h_cost: {}, f_cost: {}", node.position.xy(), node.g_cost, node.h_cost, node.f_cost());
                     neighbours.push(node);
                 }
             }
@@ -500,7 +492,7 @@ pub mod maze {
             (self.0 .0, self.0 .1)
         }
     }
-    
+
     impl PartialEq for Priority {
         fn eq(&self, other: &Self) -> bool {
             self.0 == other.0
@@ -512,7 +504,7 @@ pub mod maze {
     impl PartialOrd for Priority {
         fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
             other.0.partial_cmp(&self.0)
-        }        
+        }
     }
 
     impl Ord for Priority {
@@ -520,5 +512,4 @@ pub mod maze {
             other.0.cmp(&self.0)
         }
     }
-
 }
