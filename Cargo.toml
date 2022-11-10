@@ -7,4 +7,3 @@ edition = "2021"
 
 [dependencies]
 priority-queue = "1.2.3"
-slotmap = "1.0.6"

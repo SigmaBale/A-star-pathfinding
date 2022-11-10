@@ -1,6 +1,7 @@
 #![allow(dead_code)]
+use crate::error::{Error, ErrorKind};
 use priority_queue::PriorityQueue;
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::default::Default;
 use std::fs;
 use std::hash::{Hash, Hasher};
@@ -16,8 +17,11 @@ const RESET: &str = "\x1B[0m";
 pub mod maze {
 
     use super::*;
+    use ErrorKind::*;
 
-    #[derive(Clone, Copy)]
+    pub type Result<T> = std::result::Result<T, Error>;
+
+    #[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd)]
     struct Position((usize, usize));
 
     /// Wrapper around `f_cost` that represents priority inside the `PriorityQueue`.
@@ -132,7 +136,7 @@ pub mod maze {
         ///     assert_eq!(&[vec!['.', '.', '.']; 3], maze.field())
         /// }
         /// ```
-        pub fn set_inline(mut self, path: &str) -> Result<Self, &str> {
+        pub fn set_inline(mut self, path: &str) -> Result<Self> {
             if let Ok(maze) = fs::read_to_string(path) {
                 let maze = maze
                     .trim()
@@ -146,7 +150,7 @@ pub mod maze {
 
                 Ok(self)
             } else {
-                Err(path)
+                Err(InvalidFilePath.into())
             }
         }
 
@@ -161,10 +165,9 @@ pub mod maze {
         /// ...................E
         ///
         /// **Each new line is automatically formatted to represent new row.**
-        pub fn set(mut self, path: &str) -> Result<Self, &str> {
+        pub fn set(mut self, path: &str) -> Result<Self> {
             if let Ok(maze) = fs::read_to_string(path) {
                 let maze = maze
-                    .trim()
                     .split_whitespace()
                     .map(|slice| slice.chars().collect())
                     .collect::<Vec<Vec<char>>>();
@@ -175,7 +178,7 @@ pub mod maze {
 
                 Ok(self)
             } else {
-                Err(path)
+                Err(InvalidFilePath.into())
             }
         }
 
@@ -260,10 +263,10 @@ pub mod maze {
         /// If `start`, `end`, `separator` or `wall` share the same character, it will return error.
         ///
         /// Otherwise it sets path in our maze.
-        pub fn try_solve(&mut self) -> Result<(), &'static str> {
+        pub fn try_solve(&mut self) -> Result<()> {
             if let (Some(start), Some(end)) = (self.start, self.end) {
                 if self.are_chars_invalid() {
-                    return Err("Start, End, Separator and Wall characters have to be different values, they can't share the same character!");
+                    return Err(InvalidCharacters.into());
                 }
 
                 let start_node = Node {
@@ -276,7 +279,7 @@ pub mod maze {
 
                 let mut open: PriorityQueue<Node, Priority> =
                     PriorityQueue::from(vec![(start_node, priority)]);
-                let mut closed: PriorityQueue<Node, Priority> = PriorityQueue::new();
+                let mut closed: HashSet<Position> = HashSet::new();
 
                 while !open.is_empty() {
                     let current = open.pop().unwrap();
@@ -298,13 +301,8 @@ pub mod maze {
                     for mut neighbour in current.0.neighbours(self) {
                         let f_cost = neighbour.f_cost();
 
-                        if let Some(node) = closed.get(&neighbour) {
-                            if node.0.lower_cost(&neighbour) {
-                                continue;
-                            } else {
-                                neighbour.previous = Some(Box::new(current.0.clone()));
-                                open.push(neighbour, Priority(f_cost));
-                            }
+                        if closed.get(&neighbour.position).is_some() {
+                            continue;
                         } else if let Some(node) = open.get(&neighbour) {
                             if node.0.lower_cost(&neighbour) {
                                 continue;
@@ -317,36 +315,36 @@ pub mod maze {
                             open.push(neighbour, Priority(f_cost));
                         }
                     }
-                    closed.push(current.0, current.1);
+                    closed.insert(current.0.position);
                 }
-                Err("Maze is not solvable, impossible to reach the end! :(")
+                Err(MazeIsNotSolvable.into())
             } else {
-                Err("Start/End is not set, check that your characters match the ones in the text file! Or your maze is too small (3 < fields).")
+                Err(StartEndNotSet.into())
             }
         }
 
         /// Returns `Vec` that represents the shortest path from `Start` to the `End`
         ///
         /// If maze is not solved it will return `Err`. You must first `try_solve` the maze.
-        pub fn get_path(&self) -> Result<Vec<(usize, usize)>, &'static str> {
+        pub fn get_path(&self) -> Result<Vec<(usize, usize)>> {
             if let Some(path) = &self.path {
                 let vec = path.fields.iter().copied().collect::<Vec<_>>();
                 Ok(vec)
             } else {
-                Err("Path is not found! First solve the maze using `try_solve`.")
+                Err(MazeNotSolved.into())
             }
         }
 
         /// Prints the solved maze, path is marked with `path_char`.
         ///
         /// If maze is not solved, it will return `Err`. You must first `try_solve` the maze.
-        pub fn print_path(&self) -> Result<(), &'static str> {
+        pub fn print_path(&self) -> Result<()> {
             if self.path.is_some() {
                 let x_str_len = self.x_len().to_string().len() as i32;
-                let x_len = (self.x_len() as i32 - x_str_len).abs() as usize;
+                let x_len = (self.x_len() as i32 - x_str_len).unsigned_abs() as usize;
 
                 let y_str_len = self.y_len().to_string().len() as i32;
-                let y_len = (self.y_len() as i32 - y_str_len).abs() as usize;
+                let y_len = (self.y_len() as i32 - y_str_len).unsigned_abs() as usize;
 
                 let horizontal = format!("<{:-^x_len$}>", self.x_len());
                 let vertical: Vec<char> = format!("^{:|^y_len$}v", self.y_len()).chars().collect();
@@ -367,25 +365,25 @@ pub mod maze {
                             print!("{char}")
                         }
                     }
-                    print!(" {}\n", slice[y]);
+                    println!(" {}", slice[y]);
                 }
 
                 Ok(())
             } else {
-                Err("Path is not found! First solve the maze using `try_solve`.")
+                Err(MazeIsNotSet.into())
             }
         }
 
         /// Prints the maze that is loaded from the text file.
         ///
         /// If maze is not loaded then it will return `Err`. You must first `set` the maze.
-        pub fn print_maze(&self) -> Result<(), &'static str> {
+        pub fn print_maze(&self) -> Result<()> {
             if !self.maze.is_empty() {
                 let x_str_len = self.x_len().to_string().len() as i32;
-                let x_len = (self.x_len() as i32 - x_str_len).abs() as usize;
+                let x_len = (self.x_len() as i32 - x_str_len).unsigned_abs() as usize;
 
                 let y_str_len = self.y_len().to_string().len() as i32;
-                let y_len = (self.y_len() as i32 - y_str_len).abs() as usize;
+                let y_len = (self.y_len() as i32 - y_str_len).unsigned_abs() as usize;
 
                 let horizontal = format!("<{:-^x_len$}>", self.x_len());
                 let vertical: Vec<char> = format!("^{:|^y_len$}v", self.y_len()).chars().collect();
@@ -404,12 +402,12 @@ pub mod maze {
                             print!("{char}")
                         }
                     }
-                    print!(" {}\n", slice[y]);
+                    println!(" {}", slice[y]);
                 }
                 println!("\n\n");
                 Ok(())
             } else {
-                Err("Maze is not set or is too small! Set your maze using `set` or increase the size of the maze!")
+                Err(MazeIsNotSet.into())
             }
         }
 
@@ -461,7 +459,7 @@ pub mod maze {
     impl Node {
         fn new(position: Position, previous: &Node, end: Position) -> Self {
             let mut node = Node {
-                position: position,
+                position,
                 g_cost: 0,
                 h_cost: 0,
                 previous: None,

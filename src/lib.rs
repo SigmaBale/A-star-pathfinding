@@ -1,3 +1,4 @@
+pub mod error;
 /// This crate provides basic API for solving 2D mazes inside a text file.
 ///
 /// User can use custom characters for marking start and end positions, row separator
