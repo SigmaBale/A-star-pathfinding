@@ -15,3 +15,4 @@ pub(crate) mod maze;
 pub(crate) mod node;
 
 pub use maze::Maze;
+pub use error::Error;

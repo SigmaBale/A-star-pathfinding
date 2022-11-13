@@ -97,7 +97,7 @@ impl Maze {
     ///
     /// # Errors
     /// 
-    /// Returns [`Error`] if it fails to parse the text file.
+    /// Returns [`Error`](crate::error::Error) if it fails to parse the text file.
     /// 
     /// # Examples
     ///
