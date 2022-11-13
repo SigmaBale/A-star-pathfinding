@@ -1,7 +1,6 @@
-use astar::pathfinder::maze::Maze;
+use astar::Maze;
 use std::process;
 
-// Example:
 fn main() {
     let mut maze = Maze::new().set("maze.txt").unwrap_or_else(|e| {
         println!("{e}");

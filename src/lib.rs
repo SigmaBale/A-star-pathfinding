@@ -1,4 +1,4 @@
-pub mod error;
+pub(crate) mod error;
 /// This crate provides basic API for solving 2D mazes inside a text file.
 ///
 /// User can use custom characters for marking start and end positions, row separator
@@ -11,4 +11,7 @@ pub mod error;
 /// For now it only contains **A*** (A-star) pathfinder and it is guaranteed to find the shortest possible path.
 ///
 /// *Note:* *It also uses `extern` crate `priority_queue`.*
-pub mod pathfinder;
+pub(crate) mod maze;
+pub(crate) mod node;
+
+pub use maze::Maze;

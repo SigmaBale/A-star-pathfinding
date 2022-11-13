@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 use std::fmt::Display;
 
+/// [`Error`] type that is defined specifically for [`crate::Maze`] type
 #[derive(Debug)]
 pub struct Error {
     kind: ErrorKind,
