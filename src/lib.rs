@@ -6,7 +6,7 @@ pub(crate) mod error;
 ///
 /// Maze is directly loaded from text file and is solved using Euclidian Distance heuristic.
 ///
-/// It uses 8 directions of movement (straight and diagonal).
+/// It uses 8 directions of movement.
 ///
 /// For now it only contains **A*** (A-star) pathfinder and it is guaranteed to find the shortest possible path.
 ///
